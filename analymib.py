@@ -87,52 +87,31 @@ def get_mib(f):
             #print new_mib.name
 
 def main(args, files1, files2):
-    mibs = []
+    container = {}
     for f1 in files1:
+        container[f1.name] = []
         while True:
             try:
-                mibs.append(get_mib(f1))
+                container[f1.name].append(get_mib(f1))
             except NoMatches:
                 break
 
-        for mib in mibs[:]:
-            if mib.name not in mibs_checked:
-                print "Analysing: %s" % mib.name
-                mibs_checked.append(mib.name)
-                results[mib.name] = namedtuple("result", 
-                                                        "count, ")
-                results[mib.name].count = 0
-                for new_mib in mibs[:]:
-                    if mib.name == new_mib.name:
-                        results[mib.name].count += 1
-                    
-                print "%s, %s" % (mib.name, results[mib.name].count)
-
-
+        for f in container:
+            for mib in container[f]:
+                if mib.name not in mibs_checked:
+                    print "Analysing: %s" % mib.name
+                    mibs_checked.append(mib.name)
+                    results[f][mib.name] = namedtuple("result", 
+                                                           "count, ")
+                    results[f][mib.name].count = 0
+                    for new_mib in container[f]:
+                        if mib.name == new_mib.name:
+                            results[f][mib.name].count += 1
                         
-#            if mib.name not in mibs_checked:
-#                print "Analysing: %s" % mib.name
-#                mibs_checked.append(mib.name)
-#                for f2 in files2:
-#                    results[f2.name][mib.name] = namedtuple("result", 
-#                                                            "count, ")
-#                    results[f2.name][mib.name].count = 0
-#                    while True:
-#                        try:
-#                            new_mib = get_mib(f2)
-#                        except NoMatches:
-#                            break
-#                        if new_mib.name == mib.name:
-#                            results[f2.name][mib.name].count += 1
-#                    
-#                    print "%s, %s, %s" % (f2.name, mib.name, results[f2.name][mib.name].count)
-
+                    print "%s, %s, %s" % (f, mib.name, results[f][mib.name].count)
 
     print results
                         
-
-
-
 def get_args():
     parser = argparse.ArgumentParser(description="AnalyMIB")
     parser.add_argument('files', nargs='+', type=str,
