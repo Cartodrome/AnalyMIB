@@ -2,29 +2,25 @@ import argparse
 import re
 import warnings
 from collections import namedtuple
+import time
 
 MIB_START = re.compile("begin (?P<name>[A-Za-z0-9]*)")
-MIB_FIELD = re.compile("(?P<name>[A-Za-z0-9]*)\s{0,1}(?P<value>[^\s]*)")
-MIB_END   = re.compile("end (?P<name>[A-Za-z0-9]*)") 
+MIB_FIELD = re.compile("\s*(?P<name>[A-Za-z0-9]+)\s{0,1}(?P<value>.*)")
+MIB_END   = re.compile("end")
 
 
 class MIB(object):
     def __init__(self, name):
-        self.name = name 
+        self.name = name
         self.fields = {}
 
     def add_field(self, name, value):
-        #if name in self.fields:
-            #warnings.warn("%s, field %s with value %s, overwritten with %s" % (
-            #    self.name, name, self.fields[name], value), Warning) 
-            #print self
-            #exit()
         self.fields[name] = value
 
     def __repr__(self):
         return "BEGIN %s\n %s\nEND" % (self.name, "\n ".join(
-            [key + " " + value for key in self.fields for value in 
-             self.fields.values()]))
+            [key + " " + value for key in self.fields for value in
+             [self.fields[key]]]))
 
 
 class MIBFile(object):
@@ -56,33 +52,41 @@ def get_mib(f):
     new_mib = None
     while keep_looking:
         line = f.readline()
+        #print line
         if line == "":
             counter +=1
         if counter == lines_to_give_up:
-            raise NoMatches 
+            raise NoMatches
 
         if new_mib:
             if MIB_END.match(line):
+                #print "X end"
                 return new_mib
 
             try:
                 r = MIB_FIELD.match(line).groupdict()
             except AttributeError:
-                print "Failed to match: %s" % line
-                exit()
+                if line[0] == "#":
+                    continue
+                else:
+                    #print "Failed to match: %s" % line
+                    continue
 
             try:
+                #print "X add field"
                 new_mib.add_field(name=r["name"],
                                   value=r["value"])
+               # print "X field added"
             except AssertionError:
+                print "X blank field"
                 new_mib.add_field(name=r["name"],
                                   value="")
+                #print "X added blank"
 
-            #if new_mib.name == "vpssCfgSipBindTable" or new_mib.name == "mcRtpPortTable":
-            #    print r["value"].strip()
 
         r = MIB_START.match(line)
         if r:
+            #print "X start"
             new_mib = MIB(r.groupdict()["name"])
             #print new_mib.name
 
@@ -92,26 +96,51 @@ def main(args, files1, files2):
         container[f1.name] = []
         while True:
             try:
-                container[f1.name].append(get_mib(f1))
+                mib = get_mib(f1)
+                container[f1.name].append(mib)
             except NoMatches:
                 break
 
-        for f in container:
-            for mib in container[f]:
-                if mib.name not in mibs_checked:
-                    print "Analysing: %s" % mib.name
-                    mibs_checked.append(mib.name)
-                    results[f][mib.name] = namedtuple("result", 
-                                                           "count, ")
-                    results[f][mib.name].count = 0
-                    for new_mib in container[f]:
-                        if mib.name == new_mib.name:
-                            results[f][mib.name].count += 1
-                        
-                    print "%s, %s, %s" % (f, mib.name, results[f][mib.name].count)
 
+
+    for f1 in container:
+        for mib in container[f1]:
+            if mib.name not in mibs_checked:
+                print "Analysing: %s" % mib.name
+                mibs_checked.append(mib.name)
+
+                for f2 in container:
+                    results[f2][mib.name] = namedtuple("result",
+                                                       "count,same_fields,identical_fields")
+                    results[f2][mib.name].count = 0
+                    results[f2][mib.name].same_fields = 0
+                    results[f2][mib.name].identical_fields = 0
+                    for new_mib in container[f2]:
+                        if mib.name == new_mib.name:
+                            results[f2][mib.name].count += 1
+                            if mib.fields.keys() == new_mib.fields.keys():
+                                results[f2][mib.name].same_fields += 1
+                            if mib.fields == new_mib.fields:
+                                results[f2][mib.name].identical_fields += 1
+
+                    #print "%s, %s, %s" % (f2, mib.name, results[f2][mib.name].count)
+
+
+    results_file = open("results.csv", "w")
     print results
-                        
+    print results.keys()
+    results_file.write(",%s\n" % ",".join(results))
+    for result in results:
+        for mib_name in results[result]:
+            results_file.write("%s,%s,%s,%s\n" % (
+                mib_name,
+                ",".join([str(results[f][mib_name].count) for f in results]),
+                ",".join([str(results[f][mib_name].same_fields) for f in results]),
+                ",".join([str(results[f][mib_name].identical_fields) for f in results])))
+
+        break
+
+
 def get_args():
     parser = argparse.ArgumentParser(description="AnalyMIB")
     parser.add_argument('files', nargs='+', type=str,
